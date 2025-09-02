@@ -3,12 +3,29 @@ import { useState } from "react";
 import api from "@/lib/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import Swal from "sweetalert2";
-import { if } from '../../../.next/server/chunks/ssr/[turbopack]_runtime';
-import { log } from "console";
+import { toast, Toaster } from "react-hot-toast";
+
+interface RegisterForm {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirm_password: string;
+}
+
+interface AxiosErrorResponse {
+  response?: {
+    data?: {
+      errors?: { message: string }[];
+      message?: string;
+    };
+  };
+}
 
 export default function Register() {
-  const [formData, setFormData] = useState({
+  const router = useRouter();
+  const [formData, setFormData] = useState<RegisterForm>({
     first_name: "",
     last_name: "",
     email: "",
@@ -16,50 +33,63 @@ export default function Register() {
     password: "",
     confirm_password: "",
   });
+  const [loading, setLoading] = useState(false);
 
-  const router = useRouter();
-
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
   const handleRegister = async () => {
+    setLoading(true);
     try {
-      const res = await api.post(
-        "/customer-register",
-        formData
-      );
+      const res = await api.post<{
+        message: string;
+        status: number;
+        token?: string;
+      }>("/customer-register", formData);
 
       const { message, status, token } = res.data;
 
       if (status === 1) {
-        Swal.fire({ title: message, icon: "success" });
+        toast.success(message, { duration: 4000 });
         router.push("/login");
-      } else if (status === 2) {
-        Swal.fire({ title: message, icon: "info" });
+      } else if (status === 2 && token) {
+        toast(message, { icon: "ℹ️", duration: 4000 });
         router.push(
           `/otp?email=${encodeURIComponent(formData.email)}&token=${encodeURIComponent(token)}`
         );
       } else {
-        Swal.fire({ title: message, icon: "error" });
+        toast.error(message, { duration: 4000 });
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(err);
+      let msg = "Registration failed!";
 
-      // Check if backend returned validation errors
-      if (err.response?.data?.errors) {
-        const firstError = err.response.data.errors[0];
-        Swal.fire({ title: firstError.message, icon: "error" });
-      } else {
-        Swal.fire({ title: "Registration failed!", icon: "error" });
+      // Type-safe error handling
+      if (
+        typeof err === "object" &&
+        err !== null &&
+        "response" in err &&
+        typeof (err as AxiosErrorResponse).response?.data === "object" &&
+        (err as AxiosErrorResponse).response?.data !== null
+      ) {
+        const data = (err as AxiosErrorResponse).response!.data!;
+        if (data.errors && data.errors.length > 0) {
+          msg = data.errors[0].message;
+        } else if (data.message) {
+          msg = data.message;
+        }
       }
+
+      toast.error(msg, { duration: 4000 });
+    } finally {
+      setLoading(false);
     }
   };
 
-
-
   return (
     <div className="flex justify-center items-center min-h-screen bg-gray-100 dark:bg-gray-900 transition-colors px-4">
+      <Toaster position="top-right" reverseOrder={false} />
       <div className="shadow-2xl p-12 rounded-3xl w-full max-w-2xl bg-white dark:bg-gray-800 transition-colors">
         {/* Title & Subtitle */}
         <div className="mb-8 text-center">
@@ -71,7 +101,7 @@ export default function Register() {
           </p>
         </div>
 
-        {/* First Name & Last Name Side by Side */}
+        {/* First Name & Last Name */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <input
             type="text"
@@ -79,6 +109,7 @@ export default function Register() {
             placeholder="First Name"
             value={formData.first_name}
             onChange={handleChange}
+            disabled={loading}
             className="w-full border-2 border-gray-300 dark:border-gray-600 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200"
           />
           <input
@@ -87,11 +118,12 @@ export default function Register() {
             placeholder="Last Name"
             value={formData.last_name}
             onChange={handleChange}
+            disabled={loading}
             className="w-full border-2 border-gray-300 dark:border-gray-600 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200"
           />
         </div>
 
-        {/* Other Inputs Stacked */}
+        {/* Email & Phone */}
         <div className="space-y-4 mb-4">
           <input
             type="email"
@@ -99,6 +131,7 @@ export default function Register() {
             placeholder="Email"
             value={formData.email}
             onChange={handleChange}
+            disabled={loading}
             className="w-full border-2 border-gray-300 dark:border-gray-600 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200"
           />
           <input
@@ -107,11 +140,12 @@ export default function Register() {
             placeholder="Phone"
             value={formData.phone}
             onChange={handleChange}
+            disabled={loading}
             className="w-full border-2 border-gray-300 dark:border-gray-600 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200"
           />
-
         </div>
 
+        {/* Password & Confirm Password */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <input
             type="password"
@@ -119,6 +153,7 @@ export default function Register() {
             placeholder="Password"
             value={formData.password}
             onChange={handleChange}
+            disabled={loading}
             className="w-full border-2 border-gray-300 dark:border-gray-600 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200"
           />
           <input
@@ -127,6 +162,7 @@ export default function Register() {
             placeholder="Confirm Password"
             value={formData.confirm_password}
             onChange={handleChange}
+            disabled={loading}
             className="w-full border-2 border-gray-300 dark:border-gray-600 p-3 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 dark:hover:border-gray-500 transition-all duration-200"
           />
         </div>
@@ -134,9 +170,12 @@ export default function Register() {
         {/* Register Button */}
         <button
           onClick={handleRegister}
-          className="mt-6 w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all duration-200"
+          disabled={loading}
+          className={`mt-6 w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 shadow-lg hover:shadow-xl transition-all duration-200 cursor-pointer ${
+            loading ? "opacity-70 cursor-not-allowed" : ""
+          }`}
         >
-          Register
+          {loading ? "Registering..." : "Register"}
         </button>
 
         {/* Login Link */}
